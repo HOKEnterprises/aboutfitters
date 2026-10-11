@@ -757,7 +757,7 @@ button.g.btn{padding:12px 22px;background:transparent;border:1px solid var(--gol
       <div class="people">
         <div><b>Dandre Botha</b><a class="num" href="tel:+27824110996" target="_top">+27 82 411 0996</a></div>
         <div><b>Theo Ahlers</b><a class="num" href="tel:+27845817550" target="_top">+27 84 581 7550</a></div>
-        <div class="mailrow"><span class="num" id="addr">info@aboutfitters.co.za</span><button type="button" class="copy" id="copyaddr">Copy</button></div>
+        <div class="mailrow"><a class="num" id="addr" href="mailto:info@aboutfitters.co.za" target="_top">info@aboutfitters.co.za</a><button type="button" class="copy" id="copyaddr">Copy</button></div>
       </div>
       <div class="booknote">
         <p>Ready to lock in your dates? Book directly with Dandre or Theo. Want to pay your deposit by Visa or credit card? Card deposits are handled through our partner HOK Outfitters.</p>
@@ -774,9 +774,9 @@ button.g.btn{padding:12px 22px;background:transparent;border:1px solid var(--gol
       <div><label for="f-hunters">Hunters</label><input id="f-hunters" type="number" min="1" value="1"></div>
       <div><label for="f-obs">Non-hunters</label><input id="f-obs" type="number" min="0" value="0"></div>
       <div class="full"><label for="f-msg">Species you're after, and anything else we should know</label><textarea id="f-msg"></textarea></div>
-      <div class="full"><button class="btn btn-gold" id="send" type="button">Copy enquiry</button></div>
+      <div class="full"><button class="btn btn-gold" id="send" type="button">Send enquiry</button></div>
+      <input type="text" id="f-honey" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px">
       <p class="sent" id="sent" role="status"></p>
-      <div class="full" id="outwrap" hidden><label for="out">Your enquiry</label><textarea id="out" readonly></textarea></div>
     </div>
   </div>
 </section>
@@ -808,17 +808,32 @@ tabs.forEach((t,i)=>{
   });
 });
 
-document.getElementById('send').addEventListener('click',()=>{
-  const name=document.getElementById('f-name').value.trim();
-  const email=document.getElementById('f-email').value.trim();
-  const out=document.getElementById('sent');
-  if(!name||!/\S+@\S+\.\S+/.test(email)){out.textContent='Add your name and a valid email so we can reply.';return;}
+// Enquiries are emailed straight to Dandre through FormSubmit (free, no account).
+// The very first enquiry triggers a one-time "Activate form" email to the inbox below.
+// Until that is clicked, or if sending fails, the visitor's email app opens with the enquiry filled in.
+const INBOX='info@aboutfitters.co.za';
+const sendBtn=document.getElementById('send');
+sendBtn.addEventListener('click',async()=>{
   const v=id=>document.getElementById(id).value.trim();
-  const body=`Hunt enquiry from ${name}\nEmail: ${email}\nHunt: ${v('f-type')}\nPreferred month: ${v('f-month')}\nHunters: ${v('f-hunters')}\nNon-hunters: ${v('f-obs')}\n\n${v('f-msg')}`;
-  const box=document.getElementById('out');box.value=body;document.getElementById('outwrap').hidden=false;
-  const done=()=>{out.textContent='Enquiry copied. Paste it into an email to info@aboutfitters.co.za.'};
-  const manual=()=>{box.focus();box.select();out.textContent='Select the text below and copy it into an email to info@aboutfitters.co.za.'};
-  try{navigator.clipboard.writeText(body).then(done,manual)}catch(e){manual()}
+  const name=v('f-name'),email=v('f-email'),out=document.getElementById('sent');
+  if(!name||!/\S+@\S+\.\S+/.test(email)){out.textContent='Add your name and a valid email so we can reply.';return;}
+  if(v('f-honey'))return;
+  const fields={Name:name,email:email,'Hunt type':v('f-type'),'Preferred month':v('f-month'),Hunters:v('f-hunters'),'Non-hunters':v('f-obs'),Message:v('f-msg')};
+  const openMail=()=>{
+    const body=`Hunt enquiry from ${name}\nEmail: ${email}\nHunt: ${fields['Hunt type']}\nPreferred month: ${fields['Preferred month']}\nHunters: ${fields.Hunters}\nNon-hunters: ${fields['Non-hunters']}\n\n${fields.Message}`;
+    location.href='mailto:'+INBOX+'?subject='+encodeURIComponent('Hunt enquiry from '+name)+'&body='+encodeURIComponent(body);
+    out.textContent='Your email app should open with the enquiry ready. Just press send. If it does not open, email '+INBOX+'.';
+  };
+  sendBtn.disabled=true;sendBtn.textContent='Sending...';out.textContent='';
+  try{
+    const r=await fetch('https://formsubmit.co/ajax/'+INBOX,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},
+      body:JSON.stringify(Object.assign({_subject:'New hunt enquiry from '+name,_template:'table',_captcha:'false'},fields))});
+    const d=await r.json();
+    if(String(d.success)!=='true')throw new Error(d.message||'not sent');
+    out.textContent='Enquiry sent. Thanks '+name.split(' ')[0]+', Dandre or Theo will be in touch.';
+    ['f-name','f-email','f-msg'].forEach(id=>document.getElementById(id).value='');
+  }catch(e){openMail();}
+  finally{sendBtn.disabled=false;sendBtn.textContent='Send enquiry';}
 });
 document.getElementById('copyaddr').addEventListener('click',e=>{
   const b=e.currentTarget,a=document.getElementById('addr').textContent;
